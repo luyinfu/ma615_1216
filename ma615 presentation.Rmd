@@ -1,0 +1,114 @@
+---
+title: "ma615"
+author: "Luyin Fu"
+date: "12/13/2019"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+    transition: slower
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+pacman::p_load("ggplot2","plotly","knitr","dplyr","tidyr", "stringr", "tinytex","magrittr","kableExtra", "newsanchor", "tidytext", "wordcloud", "RColorBrewer")
+
+```
+
+
+
+
+## What's up, San Francisco?
+<div class="blue2">Catch up with San Francisco news at a glance.</div>
+
+Using news API, I made a wordcloud of the most frequently appeared words in the most relevant news last month
+
+```{r, message=FALSE}
+df <- get_everything(query = "san francisco", sort_by = "relevancy", page = 1, page_size = 100, from = "2019-11-14", api_key ="6572647b5bd941efa75620ffe1bfeca0")
+# #from = "2019-11-14",
+# #page = 1, page_size = 100, sort_by = "popularity",
+# 
+# df$results_df[[3]]
+
+# title=df$results_df[2]
+ description=df$results_df[[3]]
+# author=df$results_df[1]
+# id=df$results_df[8]
+pal2 <- brewer.pal(8,"Dark2")
+set.seed(8)
+
+tibble(description) %>% 
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words) %>%
+  count(word, sort = TRUE) %>%
+  with(wordcloud(word, n, max.words = 100, rot.per = 0.25, colors = pal2, random.order=FALSE, vfont=c("serif","plain"))) 
+```
+
+
+```{r}
+#%>% inner_join(get_sentiments("afinn"))
+
+description_bigrams=tibble(description) %>%
+  unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  count(word1, word2, sort = TRUE)
+  
+
+
+```
+
+
+
+```{r}
+film_loc=read.csv("film_loc.csv")
+film_loc %<>% 
+  #unifying the names of production companies
+  mutate(Production.Company=as.character(Production.Company)) %>%
+  mutate(`Production Company`=ifelse(str_detect(Production.Company, "Columbia Pictures"), "Columbia Pictures Corp.", ifelse(str_detect(Production.Company, "Metro-Goldwyn"), "Metro-Goldwyn Mayor", ifelse(str_detect(Production.Company, "Orion Pictures"), "Orion Pictures Corp.", ifelse(str_detect(Production.Company, "PYM Particles"), "PYM Particles Production, LCC", ifelse(str_detect(Production.Company, "Twentieth Century Fox"), "Twentieth Century Fox Film Coorp.", ifelse(str_detect(Production.Company, "Warner Bro"), "Warner Bros. Pictures", Production.Company))))))) %>%
+  select(-Production.Company)
+```
+
+
+## map
+
+```{r}
+library(maps)
+library(leaflet)
+# create San Francisco Map
+leaflet() %>% #set the coordinate for San Francisco
+  setView(-122.4194, 37.7749, zoom = 12) %>% 
+  addProviderTiles("CartoDB.Positron", group = "Map") %>%
+  addProviderTiles("Esri.WorldImagery", group = "Satellite")%>% 
+  addProviderTiles("OpenStreetMap", group = "Mapnik")
+```
+
+## table
+```{r}
+# create a table that shows the production company that shot the largest nbumber of films in San Francisco
+film_loc %>% 
+  group_by(`Production Company`, Title) %>%
+  mutate(n=n()) %>% ungroup() %>%
+  group_by(`Production Company`) %>% mutate(`First Year`=min(Release.Year)) %>%
+  ungroup() %>% select(`Production Company`, n, `First Year`) %>% 
+  distinct() %>% arrange(desc(n)) %>%
+  slice(1:10) %>%
+  kable(align = "c", booktabs = T) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F, position = "center") 
+
+```
+
+## plot 1
+
+```{r}
+film_loc %>% select(Title, Release.Year, Distributor ) %>% 
+  group_by(Title) %>% mutate(quantity=n()) %>% distinct() %>%
+  ggplot()+
+  aes(x=Release.Year, y=quantity, label = Title, color=Distributor)+
+  geom_text(nudge_x = 0.25, nudge_y = 0.25, check_overlap = TRUE) + 
+  theme(legend.position = "none")
+  #scale_color_brewer(type = 'div', palette = 4, guide = FALSE) 
+
+```
+
