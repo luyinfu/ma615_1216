@@ -71,16 +71,17 @@ wordcloud2(description_bigrams, size =2, shape = 'pentagon', color = "random-lig
 ## Sentiments
 
 Comparing the news to the AFFIN lexicon, we can assign sentiment value to words appearing in the news.
+
 The sentiments of news coverage this week is pretty balanced
 
 ```{r, message=FALSE}
-tibble(description) %>% mutate(id = row_number()) %>%
+p1=tibble(description) %>% mutate(id = row_number()) %>%
   unnest_tokens(word, description) %>%
   anti_join(stop_words) %>% 
   inner_join(get_sentiments("afinn")) %>%
   group_by(id) %>% mutate(sentment=sum(value)) %>% ungroup() %>%
   ggplot()+geom_density(aes(x=sentment), color="#FF99CC", fill="#FF99CC", alpha=0.5)
-
+ggplotly(p1)
 ```
 
 
