@@ -22,3 +22,8 @@ leaflet() %>%
   addProviderTiles("OpenStreetMap", group = "Mapnik")
 
 
+df1 <- get_headlines(query = "san francisco", category = terms_category[[1]][1], page = 1, page_size = 100, api_key ="6572647b5bd941efa75620ffe1bfeca0")
+df1$results_df[[3]]
+
+
+

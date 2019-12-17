@@ -5,7 +5,6 @@ date: "12/13/2019"
 output:
   ioslides_presentation:
     widescreen: true
-    smaller: true
     transition: slower
 ---
 
@@ -13,6 +12,9 @@ output:
 knitr::opts_chunk$set(echo = FALSE)
 pacman::p_load("ggplot2","plotly","knitr","dplyr","tidyr", "stringr", "tinytex","magrittr","kableExtra", "newsanchor", "tidytext", "wordcloud", "RColorBrewer")
 
+#PLEASE download this package from github!
+#OR part of the plots won't show up
+#devtools::install_github("lchiffon/wordcloud2")
 ```
 
 
@@ -21,10 +23,11 @@ pacman::p_load("ggplot2","plotly","knitr","dplyr","tidyr", "stringr", "tinytex",
 ## What's up, San Francisco?
 <div class="blue2">Catch up with San Francisco news at a glance.</div>
 
-Using news API, I made a wordcloud of the most frequently appeared words in the most relevant news last month
+Using news API, I made a wordcloud of the most frequently appeared words in the most relevant news last month. The download limit is 100 items.
 
 ```{r, message=FALSE}
-df <- get_everything(query = "san francisco", sort_by = "relevancy", page = 1, page_size = 100, from = "2019-11-14", api_key ="6572647b5bd941efa75620ffe1bfeca0")
+
+df <- get_everything(query = "san francisco", sort_by = "relevancy", page = 1, page_size = 100, api_key ="6572647b5bd941efa75620ffe1bfeca0")
 # #from = "2019-11-14",
 # #page = 1, page_size = 100, sort_by = "popularity",
 # 
@@ -37,31 +40,71 @@ df <- get_everything(query = "san francisco", sort_by = "relevancy", page = 1, p
 pal2 <- brewer.pal(8,"Dark2")
 set.seed(8)
 
-tibble(description) %>% 
+wordfreq=tibble(description) %>% 
   unnest_tokens(word, description) %>%
   anti_join(stop_words) %>%
-  count(word, sort = TRUE) %>%
-  with(wordcloud(word, n, max.words = 100, rot.per = 0.25, colors = pal2, random.order=FALSE, vfont=c("serif","plain"))) 
+  count(word, sort = TRUE)
+wordcloud(wordfreq$word, freq = wordfreq$n, scale=c(6, 0.6), max.words = 80, rot.per = 0.25, colors = pal2, random.order=FALSE, vfont=c("serif","plain")) 
 ```
 
+## What's going on in San Francisco? 
+
+This is a wordcloud of most frequently appeared phrases. Some of the phrases that caught my attention are: 5G Service, Scooter Company, SanFrancisco startup, Administrative Leave
 
 ```{r}
-#%>% inner_join(get_sentiments("afinn"))
+library(wordcloud2)
 
 description_bigrams=tibble(description) %>%
   unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
   separate(bigram, c("word1", "word2"), sep = " ") %>%
   filter(!word1 %in% stop_words$word) %>%
   filter(!word2 %in% stop_words$word) %>%
-  count(word1, word2, sort = TRUE)
-  
+  count(word1, word2, sort = TRUE) %>%
+  mutate(word=str_c(word1, word2, sep = " ")) %>%
+  rename(freq=n) %>% 
+  select(word, freq) %>%
+  filter(freq>=2)
 
+wordcloud2(description_bigrams, size =2, shape = 'pentagon', color = "random-light")
+```
+
+## Sentiments
+
+Comparing the news to the AFFIN lexicon, we can assign sentiment value to words appearing in the news.
+The sentiments of news coverage this week is pretty balanced
+
+```{r, message=FALSE}
+tibble(description) %>% mutate(id = row_number()) %>%
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words) %>% 
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(id) %>% mutate(sentment=sum(value)) %>% ungroup() %>%
+  ggplot()+geom_density(aes(x=sentment), color="#FF99CC", fill="#FF99CC", alpha=0.5)
 
 ```
 
 
+## Data Aquisation
+
+Starting out with San Francisco film location data from (https://data.sfgov.org/Culture-and-Recreation/Film-Locations-in-San-Francisco/yitu-d5am), I downloaded the coordinates data using google API and the geocode function.
+
+<div class="red2"> Now, lets explore film locations in San Francisco!</div>
 
 ```{r}
+# This is the code I used to download coordinates data
+# film=read.csv("Film_Locations_in_San_Francisco.csv")
+# devtools::install_github("dkahle/ggmap")
+# library(ggmap)
+# 
+# register_google(key = "AIzaSyBFs5oqwXv3ovQaKNbSqCLIe9sqAcpjvNo")
+# 
+# lonlat <- geocode(paste(as.character(film$Locations), " SF"))
+# film_loc=cbind(film, lonlat)
+# write.csv(film_loc, "film_loc.csv", row.names = FALSE)
+
+
+
+# load film data
 film_loc=read.csv("film_loc.csv")
 film_loc %<>% 
   #unifying the names of production companies
@@ -71,35 +114,61 @@ film_loc %<>%
 ```
 
 
-## map
+
+
+## Film Locations in SF
+
+Here's a sample of film locations in SF
 
 ```{r}
 library(maps)
 library(leaflet)
-# create San Francisco Map
-leaflet() %>% #set the coordinate for San Francisco
-  setView(-122.4194, 37.7749, zoom = 12) %>% 
-  addProviderTiles("CartoDB.Positron", group = "Map") %>%
-  addProviderTiles("Esri.WorldImagery", group = "Satellite")%>% 
-  addProviderTiles("OpenStreetMap", group = "Mapnik")
+film_loc1=film_loc %>% drop_na(lon) %>% sample_n(25)
+        #define icons for film shooting spots 
+        icons1 <- awesomeIcons(
+            icon = 'home',
+            iconColor = 'rgba',
+            library = 'fa', 
+            markerColor = 'lightblue',
+            squareMarker = F,
+            spin=T
+        )
+        # create San Francisco Map
+        leaflet(film_loc1) %>% #set the coordinates for San Francisco
+            setView(-122.4194, 37.7749, zoom = 12) %>% 
+            addProviderTiles("CartoDB.Positron", group = "Map") %>%
+            addProviderTiles("Esri.WorldImagery", group = "Satellite")%>% 
+            addProviderTiles("OpenStreetMap", group = "Mapnik") %>% 
+            #add markers for the locations where the selected film was shot
+            addAwesomeMarkers(~lon, ~lat, label = ~Title, icon = icons1) %>%
+            addScaleBar(position = "bottomleft") 
+            
 ```
 
-## table
+
+## Production Companies
+
+Production Companies that shot the largest quantity of movies in SF
+
 ```{r}
 # create a table that shows the production company that shot the largest nbumber of films in San Francisco
 film_loc %>% 
   group_by(`Production Company`, Title) %>%
-  mutate(n=n()) %>% ungroup() %>%
+  mutate(`number of films`=n()) %>% ungroup() %>%
   group_by(`Production Company`) %>% mutate(`First Year`=min(Release.Year)) %>%
-  ungroup() %>% select(`Production Company`, n, `First Year`) %>% 
-  distinct() %>% arrange(desc(n)) %>%
+  ungroup() %>% select(`Production Company`, `number of films`, `First Year`) %>% 
+  distinct() %>% arrange(desc(`number of films`)) %>%
   slice(1:10) %>%
   kable(align = "c", booktabs = T) %>%
-  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F, position = "center") 
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = T, position = "center") %>%
+  column_spec(2, width = "8em", background = "#56B4E9")%>%
+  row_spec(0, angle = -25)
 
 ```
 
-## plot 1
+## Film names
+
+Here are some of the films that have scenes shot in SF
 
 ```{r}
 film_loc %>% select(Title, Release.Year, Distributor ) %>% 
@@ -107,8 +176,23 @@ film_loc %>% select(Title, Release.Year, Distributor ) %>%
   ggplot()+
   aes(x=Release.Year, y=quantity, label = Title, color=Distributor)+
   geom_text(nudge_x = 0.25, nudge_y = 0.25, check_overlap = TRUE) + 
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  labs(x="Release Year",
+       y="Number of Scenes in SF",
+       title = "Films shot in San Francisco")
   #scale_color_brewer(type = 'div', palette = 4, guide = FALSE) 
-
 ```
+
+
+## Films
+
+Films that shot most scenes in SF
+
+```{r}
+p2=film_loc %>% count(Title, sort = TRUE) %>% slice(1:10) %>%
+  ggplot() +aes(x=Title, y=n)+geom_bar(stat = "identity", fill="#C3D7A4")+ coord_flip()+theme(legend.position = "none")
+ggplotly(p2)
+```
+
+
 
